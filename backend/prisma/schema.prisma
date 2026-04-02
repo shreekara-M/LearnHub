@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum OtpPurpose {
+  EMAIL_VERIFY
+  LOGIN
+}
+
+model User {
+  id             String           @id @default(cuid())
+  email          String           @unique
+  passwordHash   String?
+  name           String
+  avatarUrl      String?
+  role           Role             @default(USER)
+  isVerified     Boolean          @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  courses        Course[]         @relation("CourseInstructor")
+  purchases      Purchase[]       @relation("PurchaseUser")
+  lessonProgress LessonProgress[] @relation("LessonProgressUser")
+  otps           Otp[]            @relation("OtpUser")
+  payments       Payment[]        @relation("PaymentUser")
+
+  @@index([role])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model Course {
+  id          String     @id @default(cuid())
+  title       String
+  slug        String     @unique
+  description String
+  thumbnailUrl String?
+  price       Int
+  isPublished Boolean    @default(false)
+  instructorId String
+  deletedAt   DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  instructor  User       @relation("CourseInstructor", fields: [instructorId], references: [id], onDelete: Restrict)
+  lessons     Lesson[]   @relation("CourseLessons")
+  purchases   Purchase[] @relation("PurchaseCourse")
+  payments    Payment[]  @relation("PaymentCourse")
+
+  @@index([instructorId])
+  @@index([isPublished])
+  @@index([deletedAt])
+  @@map("courses")
+}
+
+model Lesson {
+  id          String           @id @default(cuid())
+  courseId    String
+  title       String
+  description String?
+  videoUrl    String
+  duration    Int              @default(0)
+  order       Int
+  isFree      Boolean          @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  course      Course           @relation("CourseLessons", fields: [courseId], references: [id], onDelete: Restrict)
+  progress    LessonProgress[] @relation("LessonProgressLesson")
+
+  @@unique([courseId, order])
+  @@index([courseId])
+  @@index([deletedAt])
+  @@map("lessons")
+}
+
+model Purchase {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId  String
+  paymentId String?  @unique
+  amount    Int
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation("PurchaseUser", fields: [userId], references: [id], onDelete: Restrict)
+  course    Course   @relation("PurchaseCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  payment   Payment? @relation("PurchasePayment", fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([userId, courseId])
+  @@index([deletedAt])
+  @@map("purchases")
+}
+
+model LessonProgress {
+  id            String    @id @default(cuid())
+  userId        String
+  lessonId      String
+  completedAt   DateTime?
+  watchedSeconds Int      @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation("LessonProgressUser", fields: [userId], references: [id], onDelete: Restrict)
+  lesson        Lesson    @relation("LessonProgressLesson", fields: [lessonId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([lessonId])
+  @@map("lesson_progress")
+}
+
+model Otp {
+  id           String     @id @default(cuid())
+  email        String
+  userId       String?
+  code         String
+  purpose      OtpPurpose
+  expiresAt    DateTime
+  used         Boolean    @default(false)
+  attempts     Int        @default(0)
+  passwordHash String?
+  name         String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  user         User?      @relation("OtpUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email, purpose])
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([used])
+  @@map("otps")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  userId            String
+  courseId          String
+  razorpayOrderId   String        @unique
+  razorpayPaymentId String?       @unique
+  razorpaySignature String?
+  amount            Int
+  currency          String        @default("INR")
+  status            PaymentStatus @default(PENDING)
+  deletedAt         DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  user              User          @relation("PaymentUser", fields: [userId], references: [id], onDelete: Restrict)
+  course            Course        @relation("PaymentCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  purchase          Purchase?     @relation("PurchasePayment")
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("payments")
+}
